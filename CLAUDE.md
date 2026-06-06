@@ -1,343 +1,100 @@
 # Project Instructions
 
-> React Three Fiber + TypeScript + Tailwind CSS project template for 3D applications.
+> 交互式 3D 角色动画教学应用：手搓 `SkinnedMesh`，讲解骨骼蒙皮原理（LBS）。
+> React Three Fiber + TypeScript + Tailwind v4 + Zustand + Vite。
 
-## Tech Stack
+## Commands
 
-- **3D Engine**: Three.js + React Three Fiber (R3F) + Drei helpers
-- **Framework**: React 19+ with TypeScript (strict mode)
-- **Styling**: Tailwind CSS v4 — for HTML overlay UI only; wired via `@tailwindcss/vite` in `vite.config.ts` (no plugin = utility classes silently won't compile)
-- **State**: Zustand — global state, especially for Canvas↔UI communication
-- **Build**: Vite
-- **Linting**: ESLint + Prettier
-- **Testing**: Vitest + React Testing Library
-- **Dev Tools**: Leva (parameter GUI) + r3f-perf (performance monitor)
+```bash
+npm run dev          # Vite 开发服务器（勿自动启动，由用户决定）
+npm run build        # tsc -b && vite build
+npm run lint         # ESLint，--max-warnings 0（CI 必过）
+npm run lint:fix     # 自动修复
+npm run type-check   # tsc --noEmit
+npm run test         # vitest run（一次性）
+npm run test:watch   # vitest watch
+npm run format       # prettier 写入
+```
 
-## File & Folder Structure
+## 这个项目在做什么
+
+左侧 5 章教程面板（HTML overlay）+ 右侧实时 3D 演示（Canvas），讲解骨骼蒙皮：
+
+| 章 | 主题 | 核心交互 |
+|----|------|----------|
+| 1 | 骨架与层级 | 拖动 3 个关节角度，看 Bone 父子 transform 传递 |
+| 2 | Rest / Bind Pose | `rest` vs `posed` 重绑定，看 inverse bind matrix 的影响 |
+| 3 | 蒙皮 LBS | `blendWidth` 调过渡带、权重热力图、solo 单骨骼 |
+| 4 | 空间转换 | 平移 mesh，看 local/mesh/bone/world 坐标差异 |
+| 5 | 速查总览 | 公式与 Three.js API |
+
+核心 3D 对象是一根沿 +Y 的圆柱手臂，由 3 根 Bone（shoulder/elbow/wrist）串联驱动。
+
+## 架构：模块级单例 Rig（最重要，易误改）
+
+`src/utils/skinning.ts` 用 `getArmRig()` 维护**唯一的 SkinnedMesh 装配单例**
+（geometry / material / bones / skeleton / mesh）。这是本项目跨 Canvas/UI 边界
+共享可变 3D 状态的刻意手法：
+
+- **Canvas 侧**（`SkinnedArm` / `BoneGizmo` / `SpaceAxes`）在 `useFrame` 内
+  `getArmRig()` 取用并 mutate 骨骼 —— rig 是稳定单例，**不进依赖数组**。
+- **UI 侧**（`MatrixInspector`）读同一份 live 骨骼/矩阵，用低频 `setInterval`
+  （~8fps）轮询显示数值 —— **绝不在 useFrame 里 setState**。
+- Zustand（`useTutorialStore`）只存标量参数（关节角度、blendWidth、章节等），
+  **不存** rig 本身。
+- 组件卸载**不 dispose** 单例，重新挂载复用。
+- 蒙皮 LBS 在 `getSkinnedVertexWorld()` 里有一份 CPU 等价实现，供面板展示数值。
+
+## 目录结构
 
 ```
 src/
 ├── components/
-│   ├── canvas/           # 3D components (rendered inside <Canvas>)
-│   │   ├── Scene/        # Main scene setup (lights, env, controls)
-│   │   └── InteractiveBox/
-│   └── ui/               # HTML overlay components
-│       └── Overlay/
-├── hooks/                # Shared custom hooks
-├── store/                # Zustand stores
-├── utils/                # Pure utility functions
-├── types/                # Shared TypeScript types/interfaces
-├── lib/                  # Third-party wrappers & configs
-├── constants/            # App-wide constants
-├── App.tsx               # Canvas + Overlay composition
-└── main.tsx              # Entry point
+│   ├── canvas/                  # R3F 元素（禁用 DOM）
+│   │   ├── TutorialScene/       # 主场景：灯光/环境/控制器 + 一次性装配
+│   │   ├── SkinnedArm/          # 手臂 SkinnedMesh，每帧 mutate 骨骼
+│   │   ├── BoneGizmo/           # 关节球 + 连线 + local 坐标轴
+│   │   └── SpaceAxes/           # world/bone 坐标轴可视化
+│   └── ui/                      # HTML/Tailwind overlay（禁用 R3F）
+│       ├── TutorialPanel/       # 5 章导航 + Chapter1-5 讲解与控件
+│       ├── MatrixInspector/     # 顶点坐标实时面板（轮询，非 useFrame）
+│       ├── controls/            # 通用 Slider 等控件
+│       └── prose/               # 讲解排版组件（见下）
+├── store/useTutorialStore.ts    # 全局教程状态（标量）
+├── utils/skinning.ts            # rig 单例、几何/权重/骨架构建、LBS CPU 实现
+├── constants/tutorial.ts        # 章节元数据 CHAPTERS
+└── App.tsx                      # Canvas + TutorialPanel 组合
 ```
 
-Rules:
-- **Canvas/UI separation**: `components/canvas/` = R3F components (mesh, group, light), `components/ui/` = HTML/Tailwind overlay components. Never mix them.
-- One component per file
-- Colocate component + test in a folder when non-trivial
-- Use barrel exports (`index.ts`) for public APIs
-
-## Canvas / UI Separation — Critical Rule
-
-This is the most important architectural constraint:
-
-- `components/canvas/` — **Only** R3F/Three.js elements. These render inside `<Canvas>` and must never use DOM elements (`div`, `button`, etc.)
-- `components/ui/` — **Only** HTML/Tailwind components. These render as overlay on top of Canvas. Use `pointer-events-none` on the container, `pointer-events-auto` on interactive elements.
-- Communication between Canvas and UI goes through **Zustand stores** — never through React context or prop drilling across the Canvas boundary.
-
-## Naming Conventions
-
-| Thing              | Convention           | Example                         |
-|--------------------|----------------------|---------------------------------|
-| Component files    | PascalCase           | `SpinningCube.tsx`              |
-| Component names    | PascalCase           | `export function SpinningCube()`|
-| Hook files         | camelCase            | `useOrbitAnimation.ts`          |
-| Hook names         | `use` prefix         | `useOrbitAnimation`             |
-| Store files        | camelCase            | `useAppStore.ts`                |
-| Store hooks        | `use...Store`        | `useAppStore`                   |
-| Utility files      | camelCase            | `math.ts`                       |
-| Utility functions  | camelCase            | `lerp()`, `clamp()`            |
-| Constants          | UPPER_SNAKE_CASE     | `DEFAULT_CAMERA_POSITION`       |
-| Types/Interfaces   | PascalCase           | `Tuple3`, `SceneConfig`         |
-| Type files         | camelCase            | `common.ts`                     |
-| Boolean vars       | `is/has/should`      | `isSelected`, `hasLoaded`       |
-| Event handlers     | `handle` prefix      | `handleClick`, `handlePointerOver` |
-| Props callbacks    | `on` prefix          | `onClick`, `onSelect`           |
-| 3D position props  | `Tuple3` type        | `position?: [number, number, number]` |
-| Test files         | `.test.tsx`          | `InteractiveBox.test.tsx`       |
-
-## TypeScript Patterns
-
-- Enable `strict: true` — never turn it off
-- Prefer `interface` for component props, `type` for unions/intersections
-- Export prop interfaces: `export interface BoxProps { ... }`
-- Avoid `any` — use `unknown` and narrow
-- Use `Tuple3` (`[number, number, number]`) for position/rotation/scale props
-- Import Three.js types with `import type`: `import type { Mesh, Group } from 'three'`
-
-## 3D Component Structure
-
-Every canvas component should follow this order:
-
-```tsx
-// 1. React/R3F imports
-import { useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
-
-// 2. Three.js type imports
-import type { Mesh } from 'three';
-
-// 3. Internal imports
-import { useAppStore } from '@/store/useAppStore';
-
-// 4. Props interface
-export interface SpinningBoxProps {
-  position?: [number, number, number];
-  color?: string;
-  speed?: number;
-}
-
-// 5. Component (named export, function declaration)
-export function SpinningBox({ position = [0, 0, 0], color = '#ff6b35', speed = 1 }: SpinningBoxProps) {
-  // 5a. Refs
-  const meshRef = useRef<Mesh>(null);
-
-  // 5b. State & store
-  const [hovered, setHovered] = useState(false);
-
-  // 5c. Frame loop (mutation only, no setState!)
-  useFrame((_, delta) => {
-    if (!meshRef.current) return;
-    meshRef.current.rotation.y += delta * speed;
-  });
-
-  // 5d. Event handlers
-  const handleClick = () => { /* ... */ };
-
-  // 5e. Return JSX (Three.js elements)
-  return (
-    <mesh ref={meshRef} position={position} onClick={handleClick}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color={color} />
-    </mesh>
-  );
-}
-```
-
-Rules:
-- **Named exports only** — no `export default`
-- Function declarations for components
-- `useFrame` callback: mutate refs only, **never call setState** (causes re-render every frame)
-- Read Zustand state in useFrame via `useAppStore.getState()` (non-reactive)
-- Keep components < 150 lines; extract sub-components or hooks if longer
-
-## Performance Rules
-
-### useFrame (60fps render loop)
-- **DO**: Mutate refs (`meshRef.current.rotation.y += delta`)
-- **DO**: Read store with `useAppStore.getState().someValue`
-- **DON'T**: Call `setState`, `set()`, or any function that triggers React re-render
-- **DON'T**: Create new objects (vectors, matrices) — reuse via refs or module-level variables
-
-### ESLint react-hooks 7.x gotchas (strict — `--max-warnings 0`)
-- `react-hooks/immutability`: never mutate a value from `useState`/`useMemo`, nor any value listed in a hook's dep array. To mutate a stable singleton inside an effect/`useFrame`, fetch it *inside* the callback (e.g. `getThing()`), not via deps.
-- `react-hooks/refs`: never read/write `ref.current` during render — only in effects/handlers.
-- For objects mutated every frame (geometry, temp vectors), prefer module-level consts over `useState`/`useMemo`/`useRef`.
-- `strict` + `noUncheckedIndexedAccess`: array/tuple access is `T | undefined` — guard or assert (`arr[i]!`).
-
-### Geometry & Material
-- Reuse geometries/materials with `useMemo` when shared across components
-- Use Drei prebuilt components (`<RoundedBox>`, `<Sphere>`, etc.) when available
-- For 100+ identical objects, use `<Instances>` from Drei
-
-### Loading
-- Wrap model/texture loading in `<Suspense>`
-- Use `useGLTF.preload('/models/xxx.glb')` for critical models
-- Dispose resources in cleanup: `useEffect(() => () => geometry.dispose(), [])`
-
-## Import Order
-
-Group and sort imports in this order (separated by blank lines):
-
-```ts
-// 1. React / R3F
-import { useState, useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Environment } from '@react-three/drei';
-
-// 2. Third-party libraries
-import { useControls } from 'leva';
-import { create } from 'zustand';
-
-// 3. Internal aliases (@/ paths)
-import { useAppStore } from '@/store/useAppStore';
-import { lerp } from '@/utils/math';
-
-// 4. Relative imports
-import { SubComponent } from './SubComponent';
-
-// 5. Type-only imports (at end of each group)
-import type { Mesh, Group } from 'three';
-import type { Tuple3 } from '@/types/common';
-```
-
-## Zustand Store Patterns
-
-```ts
-import { create } from 'zustand';
-
-interface SceneState {
-  // State
-  selectedId: string | null;
-  isPlaying: boolean;
-
-  // Actions
-  select: (id: string | null) => void;
-  togglePlay: () => void;
-}
-
-export const useSceneStore = create<SceneState>((set) => ({
-  selectedId: null,
-  isPlaying: true,
-  select: (id) => set({ selectedId: id }),
-  togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
-}));
-```
-
-Usage:
-- **In UI components** (reactive): `const selected = useSceneStore((s) => s.selectedId)`
-- **In useFrame** (non-reactive): `const selected = useSceneStore.getState().selectedId`
-- **Always use selectors** — never `useSceneStore()` without a selector (causes full re-render on any change)
-
-## UI Overlay Guidelines
-
-- Overlay container: `fixed inset-0 pointer-events-none z-10`
-- Interactive elements: add `pointer-events-auto` individually
-- Use Tailwind for all styling — same design tokens as React template
-- Glass-morphism style: `bg-black/60 backdrop-blur-sm border border-white/10 rounded-md`
-- Text on 3D backgrounds: always use `drop-shadow-md` or dark overlay for readability
-
-## Tailwind CSS Guidelines
-
-- **No inline styles** — use Tailwind classes for HTML overlay components
-- **Use `cn()` utility** for conditional classes
-- **Design tokens**: use CSS variables, don't use arbitrary values
-- **Dark mode**: use `dark:` variant
-- Only applies to `components/ui/` — canvas components don't use Tailwind
-
-## Leva Debug Controls
-
-- Use `useControls('GroupName', { ... })` to group related parameters
-- Place controls close to the component that uses them
-- Common patterns:
-  ```ts
-  const { speed, visible } = useControls('Animation', {
-    speed: { value: 1, min: 0, max: 5, step: 0.1 },
-    visible: true,
-  });
-  ```
-- Leva panel auto-renders in the DOM — no setup needed
-
-## Markdown & Code Block Rendering
-
-**Critical rule**: The moment a feature involves rendering Markdown, a `<pre><code>` block, a snippet viewer, a chat/LLM message area, a docs page, or any surface that displays source code — syntax highlighting MUST be wired up in the same change. Never ship "plain `<pre>` now, highlight later". Unhighlighted code blocks are considered a bug.
-
-### When this rule triggers
-- Any component that renders user-authored or LLM-authored Markdown (e.g. chat bubbles, AI response panels, doc viewers).
-- Any component that renders code verbatim (tutorial steps, config previews, error stack traces, diff views).
-- Any `dangerouslySetInnerHTML` or `ReactMarkdown` that could receive ```` ``` ```` fences.
-
-### Default stack (pick one, don't mix)
-
-1. **Preferred — Shiki (via `react-shiki` or `shiki` + `rehype-shiki`)**
-   - Best fidelity (VS Code TextMate grammars), SSR-friendly, themeable (`github-dark` / `github-light`).
-   - Install: `npm i react-markdown remark-gfm rehype-shiki shiki`
-   - Use with `react-markdown`:
-     ```tsx
-     import ReactMarkdown from 'react-markdown';
-     import remarkGfm from 'remark-gfm';
-     import rehypeShiki from '@shikijs/rehype';
-
-     <ReactMarkdown
-       remarkPlugins={[remarkGfm]}
-       rehypePlugins={[[rehypeShiki, { themes: { light: 'github-light', dark: 'github-dark' } }]]}
-     >
-       {markdown}
-     </ReactMarkdown>
-     ```
-
-2. **Lightweight alternative — highlight.js (via `rehype-highlight`)**
-   - Use only when bundle size is critical or Shiki's async load is unacceptable.
-   - Install: `npm i react-markdown remark-gfm rehype-highlight highlight.js`
-   - Import a theme CSS once at app root: `import 'highlight.js/styles/github-dark.css'`.
-
-### Implementation checklist (must all be true before merging)
-- [ ] A highlighter is installed and wired into the Markdown/code-rendering component.
-- [ ] A theme (light and/or dark) is loaded — verify with a `js`, `ts`, `tsx`, `bash`, `json` sample.
-- [ ] Fenced blocks without a language (```` ``` ````) still render with monospace + background, not as naked text.
-- [ ] Inline code (`` `foo` ``) is styled (padded, tinted background) — separate from block styling.
-- [ ] Long lines wrap or scroll horizontally (`overflow-x-auto`), never break layout.
-- [ ] Dark mode variant matches the app's `dark:` theme.
-- [ ] A "copy code" button is considered for block-level code in chat/doc contexts.
-
-### Canvas/UI boundary
-- Markdown and code blocks are **HTML overlay** concerns — they live in `components/ui/` only.
-- Never attempt to render code inside `<Canvas>`; use Drei's `<Html>` if absolutely required, and even then keep the Markdown component in `components/ui/`.
-
-### Testing
-- Snapshot test a Markdown component with at least one fenced ` ```tsx ` block and assert the highlighted token spans (e.g. `.hljs-keyword` or Shiki's inline `style` colors) are present in the output. A snapshot with plain `<code>` text is a regression.
-
-## Asset Management
-
-- **3D Models**: `public/models/` — use `.glb` format (smaller than `.gltf`)
-- **Textures**: `public/textures/`
-- **Load models**: `const { scene } = useGLTF('/models/myModel.glb')`
-- **Preload**: `useGLTF.preload('/models/myModel.glb')` at module level
-- **HDRI environments**: use Drei's `<Environment preset="..." />` instead of custom HDRI files
-
-## Error Handling
-
-- **Model loading**: wrap in `<Suspense>` with appropriate fallback
-- **WebGL context**: handle context loss gracefully
-- **Async operations**: try/catch with user-friendly messages in UI overlay
-- Pattern:
-  ```ts
-  try {
-    const data = await fetchData(id);
-    setState({ status: 'success', data });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unexpected error';
-    setState({ status: 'error', error: message });
-  }
-  ```
-
-## Git Workflow
-
-### Commit Messages (Conventional Commits)
-
-```
-feat: add orbit animation to planet model
-fix: resolve z-fighting on ground plane
-refactor: extract camera controls into hook
-chore: upgrade three.js to r175
-```
-
-- Subject line: imperative mood, lowercase, < 72 chars, no period
-- Body (optional): explain *why*, not *what*
-
-## Testing Guidelines
-
-- Canvas components: smoke test with `<Canvas>` wrapper
-- UI components: test with React Testing Library as usual
-- Utility functions: pure unit tests
-- Name tests descriptively: `it('bounces when clicked')`
-- Arrange-Act-Assert pattern
-
-## Comment Guidelines
-
-- **Don't comment what** — the code should be self-explanatory
-- **Do comment why** — explain non-obvious decisions, workarounds
-- **TODO format**: `// TODO: description`
-- No commented-out code in commits
+## Canvas / UI 分离（硬约束）
+
+- `components/canvas/` —— **仅** R3F/Three.js 元素，禁用 `div`/`button` 等 DOM。
+- `components/ui/` —— **仅** HTML/Tailwind，overlay 容器 `pointer-events-none`，
+  交互元素单独 `pointer-events-auto`。
+- 两侧通信走 **Zustand**（标量）或**单例 rig**（live 3D 状态），不跨边界 prop drilling。
+
+## 讲解文本排版
+
+教程讲解用自研 `ui/prose/Prose.tsx`（`<P>` `<SectionTitle>` `<Term>` `<Code>`
+`<Formula>` `<Callout tone="info|warn|key">` `<ControlGroup>`），**不是** Markdown 渲染。
+本项目无 ReactMarkdown/Shiki，新增讲解段落请复用这些组件，勿引入 Markdown 管线。
+
+## 关键约定（框架通用，从简）
+
+- **命名**：组件 PascalCase（`SkinnedArm.tsx`，named export，函数声明，无 default）；
+  hook `useXxx`；store `useXxxStore`；事件处理 `handleXxx`，回调 prop `onXxx`；
+  布尔 `is/has/should`；常量 UPPER_SNAKE；位置/旋转/缩放用 `Tuple3`。
+- **TypeScript**：`strict` + `noUncheckedIndexedAccess` —— 索引访问是 `T | undefined`，
+  必须守卫或 `arr[i]!`。props 用 `interface` 并导出；联合用 `type`；Three.js 类型 `import type`。
+- **useFrame**：只 mutate ref/单例，**禁止 setState**；读 store 用 `getState()`（非响应）；
+  复用临时对象（module-level `const tmpVec = new THREE.Vector3()`），勿每帧 new。
+- **Zustand**：永远用 selector（`useTutorialStore((s) => s.x)`），勿裸调。
+- **ESLint react-hooks 7.x**（`--max-warnings 0`）：勿 mutate useState/useMemo 值或 dep 数组中的值；
+  勿在 render 期读写 `ref.current`；每帧 mutate 的对象用 module-level const。
+- **Tailwind**：仅用于 `components/ui/`，无内联 style，条件类用 `cn()`，玻璃拟态
+  `bg-black/60 backdrop-blur-sm border border-white/10`。
+- **import 顺序**：React/R3F → 三方库 → `@/` 别名 → 相对路径 → `import type`（各组末尾）。
+- **注释**：默认不写；只解释 *why*（非显性权衡、workaround、跨模块不变量），不解释 *what*。
+- **Git**：Conventional Commits，subject 祈使态、小写、< 72 字符、无句号；prefix 用英文。
+
+## 默认回复中文（代码注释、commit message 同）；技术术语保留英文。
