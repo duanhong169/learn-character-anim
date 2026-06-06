@@ -3,19 +3,19 @@ import { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Perf } from 'r3f-perf';
 
-import { Scene } from '@/components/canvas';
-import { Overlay } from '@/components/ui';
+import { TutorialScene } from '@/components/canvas';
+import { TutorialPanel } from '@/components/ui';
 
 export function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
-      <Canvas shadows camera={{ position: [3, 2.5, 4], fov: 50 }}>
+      <Canvas shadows camera={{ position: [4, 3, 5], fov: 50 }}>
         <Suspense fallback={null}>
-          <Scene />
+          <TutorialScene />
         </Suspense>
-        <Perf position="top-left" />
+        <Perf position="top-right" />
       </Canvas>
-      <Overlay />
+      <TutorialPanel />
     </div>
   );
 }

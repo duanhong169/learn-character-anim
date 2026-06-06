@@ -6,7 +6,7 @@
 
 - **3D Engine**: Three.js + React Three Fiber (R3F) + Drei helpers
 - **Framework**: React 19+ with TypeScript (strict mode)
-- **Styling**: Tailwind CSS — for HTML overlay UI only
+- **Styling**: Tailwind CSS v4 — for HTML overlay UI only; wired via `@tailwindcss/vite` in `vite.config.ts` (no plugin = utility classes silently won't compile)
 - **State**: Zustand — global state, especially for Canvas↔UI communication
 - **Build**: Vite
 - **Linting**: ESLint + Prettier
@@ -140,6 +140,12 @@ Rules:
 - **DO**: Read store with `useAppStore.getState().someValue`
 - **DON'T**: Call `setState`, `set()`, or any function that triggers React re-render
 - **DON'T**: Create new objects (vectors, matrices) — reuse via refs or module-level variables
+
+### ESLint react-hooks 7.x gotchas (strict — `--max-warnings 0`)
+- `react-hooks/immutability`: never mutate a value from `useState`/`useMemo`, nor any value listed in a hook's dep array. To mutate a stable singleton inside an effect/`useFrame`, fetch it *inside* the callback (e.g. `getThing()`), not via deps.
+- `react-hooks/refs`: never read/write `ref.current` during render — only in effects/handlers.
+- For objects mutated every frame (geometry, temp vectors), prefer module-level consts over `useState`/`useMemo`/`useRef`.
+- `strict` + `noUncheckedIndexedAccess`: array/tuple access is `T | undefined` — guard or assert (`arr[i]!`).
 
 ### Geometry & Material
 - Reuse geometries/materials with `useMemo` when shared across components

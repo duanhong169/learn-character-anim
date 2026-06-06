@@ -1,2 +1,1 @@
-export { TutorialPanel } from './TutorialPanel';
 export { MatrixInspector } from './MatrixInspector';

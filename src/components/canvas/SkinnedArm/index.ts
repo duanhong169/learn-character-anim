@@ -1,0 +1,1 @@
+export { SkinnedArm } from './SkinnedArm';

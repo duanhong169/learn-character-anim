@@ -1,0 +1,1 @@
+export { BoneGizmo } from './BoneGizmo';
