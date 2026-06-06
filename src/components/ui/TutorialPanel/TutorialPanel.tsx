@@ -43,15 +43,15 @@ export function TutorialPanel() {
   return (
     <div className="pointer-events-none fixed inset-0 z-10">
       {/* 标题 */}
-      <div className="pointer-events-auto absolute left-4 top-4 max-w-xs">
-        <h1 className="text-sm font-bold text-white drop-shadow-md">3D 角色动画 · 交互教程</h1>
-        <p className="text-[11px] text-white/50 drop-shadow-md">骨骼蒙皮原理 by SkinnedMesh</p>
+      <div className="pointer-events-auto absolute left-4 top-4 max-w-xs rounded-lg border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-md">
+        <h1 className="text-sm font-bold text-white">3D 角色动画 · 交互教程</h1>
+        <p className="text-[11px] text-white/50">骨骼蒙皮原理 by SkinnedMesh</p>
       </div>
 
       {/* 左侧主面板 */}
       <div
         className={cn(
-          'pointer-events-auto absolute bottom-4 left-4 top-16 flex w-[340px] flex-col',
+          'pointer-events-auto absolute bottom-4 left-4 top-20 flex w-[340px] flex-col',
           'rounded-lg border border-white/10 bg-black/70 backdrop-blur-md',
         )}
       >
