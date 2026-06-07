@@ -51,7 +51,10 @@ export function Chapter4() {
         对比哪个空间的数值变了。
       </P>
 
-      <MatrixInspector />
+      {/* sticky 吸顶:向下拖滑块时坐标数值始终可见 */}
+      <div className="sticky top-0 z-10 -mx-4 -mt-2 mb-2 bg-black/90 px-4 pb-2 pt-2 backdrop-blur-md">
+        <MatrixInspector />
+      </div>
 
       <ControlGroup title="探针顶点">
         <Slider

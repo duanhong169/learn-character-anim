@@ -32,9 +32,15 @@ export function Chapter5() {
 
       <SectionTitle>四个空间一句话</SectionTitle>
       <P>
-        <Term color="#a78bfa">Local/Mesh</Term>:顶点原始坐标,不变 ·{' '}
-        <Term color="#f43f5e">Bone</Term>:骨骼局部系,变形发生处 ·{' '}
-        <Term color="#4ade80">Mesh(合回)</Term>:加权混合后回到 mesh ·{' '}
+        <Term color="#a78bfa">Local/Mesh</Term>:顶点原始坐标,不变。
+      </P>
+      <P>
+        <Term color="#f43f5e">Bone</Term>:骨骼局部系,变形发生处。
+      </P>
+      <P>
+        <Term color="#4ade80">Mesh(合回)</Term>:加权混合后回到 mesh。
+      </P>
+      <P>
         <Term color="#38bdf8">World</Term>:乘 matrixWorld 进场景。
       </P>
 
